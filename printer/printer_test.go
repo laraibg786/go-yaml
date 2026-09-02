@@ -2,6 +2,7 @@ package printer_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/goccy/go-yaml/lexer"
@@ -219,5 +220,83 @@ text3: hello
 				t.Fatalf("PrintErrorToken() got: %s\n want:%s\n", want, got)
 			}
 		})
+	}
+}
+
+func Test_Printer_FlowStyle(t *testing.T) {
+	// A flow style document puts every token on a single line.
+	tests := []struct {
+		name     string
+		yml      string
+		lineNums string
+	}{
+		{
+			name:     "single line",
+			yml:      `{a: 1, b: [2, 3], c: {d: 4}}`,
+			lineNums: ` 1 | {a: 1, b: [2, 3], c: {d: 4}}`,
+		},
+		{
+			name:     "multiline scalar in flow",
+			yml:      "{a: \"x\ny\", b: 1}",
+			lineNums: " 1 | {a: \"x\n 2 | y\", b: 1}",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			tokens := lexer.Tokenize(test.yml)
+
+			var p printer.Printer
+			if got := p.PrintTokens(tokens); got != test.yml {
+				t.Fatalf("unexpected output: expect:[%s]\n actual:[%s]", test.yml, got)
+			}
+
+			var withLineNumber printer.Printer
+			withLineNumber.LineNumber = true
+			if got := withLineNumber.PrintTokens(tokens); got != test.lineNums {
+				t.Fatalf("unexpected output: expect:[%s]\n actual:[%s]", test.lineNums, got)
+			}
+		})
+	}
+}
+
+func BenchmarkPrintTokens(b *testing.B) {
+	// The same mapping in both styles: flow puts every key on one line,
+	// block puts each on its own.
+	flow := func(n int) string {
+		var sb strings.Builder
+		sb.WriteByte('{')
+		for i := 0; i < n; i++ {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			fmt.Fprintf(&sb, "key%d: value%d", i, i)
+		}
+		sb.WriteByte('}')
+		return sb.String()
+	}
+	block := func(n int) string {
+		var sb strings.Builder
+		for i := 0; i < n; i++ {
+			fmt.Fprintf(&sb, "key%d: value%d\n", i, i)
+		}
+		return sb.String()
+	}
+	for _, style := range []struct {
+		name   string
+		render func(int) string
+	}{
+		{"flow", flow},
+		{"block", block},
+	} {
+		for _, keys := range []int{1000, 4000, 16000} {
+			tokens := lexer.Tokenize(style.render(keys))
+			b.Run(fmt.Sprintf("%s/keys=%d", style.name, keys), func(b *testing.B) {
+				b.ReportAllocs()
+				for i := 0; i < b.N; i++ {
+					var p printer.Printer
+					_ = p.PrintTokens(tokens)
+				}
+			})
+		}
 	}
 }

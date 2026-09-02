@@ -102,46 +102,37 @@ func (p *Printer) PrintTokens(tokens token.Tokens) string {
 			p.LineNumberFormat = defaultLineNumberFormat
 		}
 	}
-	texts := []string{}
+	var buf strings.Builder
 	lineNumber := tokens[0].Position.Line
+	started := false
 	for _, tk := range tokens {
 		lines := strings.Split(tk.Origin, "\n")
 		prop := p.property(tk)
-		header := ""
-		if p.LineNumber {
-			header = p.LineNumberFormat(lineNumber)
-		}
-		if len(lines) == 1 {
-			line := prop.Prefix + lines[0] + prop.Suffix
-			if len(texts) == 0 {
-				texts = append(texts, header+line)
-				lineNumber++
-			} else {
-				text := texts[len(texts)-1]
-				texts[len(texts)-1] = text + line
+		for idx, src := range lines {
+			header := ""
+			if p.LineNumber {
+				header = p.LineNumberFormat(lineNumber)
 			}
-		} else {
-			for idx, src := range lines {
-				if p.LineNumber {
-					header = p.LineNumberFormat(lineNumber)
-				}
-				line := prop.Prefix + src + prop.Suffix
-				if idx == 0 {
-					if len(texts) == 0 {
-						texts = append(texts, header+line)
-						lineNumber++
-					} else {
-						text := texts[len(texts)-1]
-						texts[len(texts)-1] = text + line
-					}
-				} else {
-					texts = append(texts, fmt.Sprintf("%s%s", header, line))
-					lineNumber++
-				}
+			line := prop.Prefix + src + prop.Suffix
+			switch {
+			case idx > 0:
+				// a token spanning multiple lines starts a new line for each of them.
+				buf.WriteByte('\n')
+				buf.WriteString(header)
+				buf.WriteString(line)
+				lineNumber++
+			case !started:
+				buf.WriteString(header)
+				buf.WriteString(line)
+				lineNumber++
+				started = true
+			default:
+				// every other token continues the line already being built.
+				buf.WriteString(line)
 			}
 		}
 	}
-	return strings.Join(texts, "\n")
+	return buf.String()
 }
 
 // PrintNode create text from ast.Node
