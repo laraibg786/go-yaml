@@ -439,55 +439,60 @@ func (p *parser) isFlowMapDelim(tk *Token) bool {
 	return tk.Type() == token.MappingEndType || tk.Type() == token.CollectEntryType
 }
 
-func (p *parser) parseMap(ctx *context) (*ast.MappingNode, error) {
+func (p *parser) parseMapEntry(ctx *context) (*ast.MappingValueNode, error) {
 	keyTk := ctx.currentToken()
 	if keyTk.Group == nil {
 		return nil, errors.ErrSyntax("unexpected map key", keyTk.RawToken())
 	}
-	var keyValueNode *ast.MappingValueNode
 	if keyTk.GroupType() == TokenGroupMapKeyValue {
 		node, err := p.parseMapKeyValue(ctx.withGroup(keyTk.Group), keyTk.Group, nil)
 		if err != nil {
 			return nil, err
 		}
-		keyValueNode = node
 		ctx.goNext()
 		if err := p.validateMapKeyValueNextToken(ctx, keyTk, ctx.currentToken()); err != nil {
 			return nil, err
 		}
-	} else {
-		key, err := p.parseMapKey(ctx.withGroup(keyTk.Group), keyTk.Group)
-		if err != nil {
-			return nil, err
-		}
-		ctx.goNext()
+		return node, nil
+	}
+	key, err := p.parseMapKey(ctx.withGroup(keyTk.Group), keyTk.Group)
+	if err != nil {
+		return nil, err
+	}
+	ctx.goNext()
 
-		valueTk := ctx.currentToken()
-		if keyTk.Line() == valueTk.Line() && valueTk.Type() == token.SequenceEntryType {
-			return nil, errors.ErrSyntax("block sequence entries are not allowed in this context", valueTk.RawToken())
-		}
-		ctx := ctx.withChild(p.mapKeyText(key))
-		value, err := p.parseMapValue(ctx, key, keyTk.Group.Last())
-		if err != nil {
-			return nil, err
-		}
-		node, err := newMappingValueNode(ctx, keyTk.Group.Last(), nil, key, value)
-		if err != nil {
-			return nil, err
-		}
-		keyValueNode = node
+	valueTk := ctx.currentToken()
+	if keyTk.Line() == valueTk.Line() && valueTk.Type() == token.SequenceEntryType {
+		return nil, errors.ErrSyntax("block sequence entries are not allowed in this context", valueTk.RawToken())
+	}
+	valueCtx := ctx.withChild(p.mapKeyText(key))
+	value, err := p.parseMapValue(valueCtx, key, keyTk.Group.Last())
+	if err != nil {
+		return nil, err
+	}
+	return newMappingValueNode(valueCtx, keyTk.Group.Last(), nil, key, value)
+}
+
+func (p *parser) parseMap(ctx *context) (*ast.MappingNode, error) {
+	keyTk := ctx.currentToken()
+	keyValueNode, err := p.parseMapEntry(ctx)
+	if err != nil {
+		return nil, err
 	}
 	mapNode, err := newMappingNode(ctx, &Token{Token: keyValueNode.GetToken()}, false, keyValueNode)
 	if err != nil {
 		return nil, err
 	}
-	var tk *Token
-	if ctx.isComment() {
-		tk = ctx.nextNotCommentToken()
-	} else {
-		tk = ctx.currentToken()
-	}
-	for tk.Column() == keyTk.Column() {
+	for {
+		var tk *Token
+		if ctx.isComment() {
+			tk = ctx.nextNotCommentToken()
+		} else {
+			tk = ctx.currentToken()
+		}
+		if tk.Column() != keyTk.Column() {
+			break
+		}
 		typ := tk.Type()
 		if ctx.isFlow && typ == token.SequenceEndType {
 			// [
@@ -506,32 +511,22 @@ func (p *parser) parseMap(ctx *context) (*ast.MappingNode, error) {
 			ctx.goNext()
 			break
 		}
-		node, err := p.parseMap(ctx)
+		entry, err := p.parseMapEntry(ctx)
 		if err != nil {
 			return nil, err
 		}
-		if len(node.Values) != 0 {
-			if err := setHeadComment(cm, node.Values[0]); err != nil {
-				return nil, err
-			}
+		if err := setHeadComment(cm, entry); err != nil {
+			return nil, err
 		}
-		mapNode.Values = append(mapNode.Values, node.Values...)
-		if node.FootComment != nil {
-			mapNode.Values[len(mapNode.Values)-1].FootComment = node.FootComment
-		}
-		tk = ctx.currentToken()
+		mapNode.Values = append(mapNode.Values, entry)
 	}
 	if ctx.isComment() {
 		if keyTk.Column() <= ctx.currentToken().Column() {
 			// If the comment is in the same or deeper column as the last element column in map value,
 			// treat it as a footer comment for the last element.
-			if len(mapNode.Values) == 1 {
-				mapNode.Values[0].FootComment = p.parseFootComment(ctx, keyTk.Column())
-				mapNode.Values[0].FootComment.SetPath(mapNode.Values[0].Key.GetPath())
-			} else {
-				mapNode.FootComment = p.parseFootComment(ctx, keyTk.Column())
-				mapNode.FootComment.SetPath(mapNode.GetPath())
-			}
+			last := mapNode.Values[len(mapNode.Values)-1]
+			last.FootComment = p.parseFootComment(ctx, keyTk.Column())
+			last.FootComment.SetPath(last.Key.GetPath())
 		}
 	}
 	return mapNode, nil
