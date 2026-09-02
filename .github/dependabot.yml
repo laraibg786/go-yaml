@@ -1,0 +1,37 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 99
+
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 99
+
+  - package-ecosystem: gomod
+    directory: /benchmarks
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 99
+
+  - package-ecosystem: gomod
+    directory: /cmd/ycat
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 99
+
+  - package-ecosystem: gomod
+    directory: /docs/playground
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 99
+
+  - package-ecosystem: npm
+    directory: /docs/playground
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 99
