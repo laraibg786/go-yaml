@@ -23,7 +23,7 @@
     "react-monaco-editor": "^0.56.2"
   },
   "devDependencies": {
-    "@eslint/js": "^9.17.0",
+    "@eslint/js": "^10.0.1",
     "@types/golang-wasm-exec": "^1.15.2",
     "@types/json2mq": "^0.2.2",
     "@types/react": "^18.3.18",
