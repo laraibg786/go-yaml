@@ -19,6 +19,10 @@ simple-test:
 fuzz:
 	go test -fuzz=Fuzz -fuzztime 60s
 
+.PHONY: bench
+bench:
+	go test -run '^$$' -bench . -benchmem ./...
+
 .PHONY: cover
 cover:
 	go test -coverpkg=.,./ast,./lexer,./parser,./printer,./scanner,./token -coverprofile=cover.out -modfile=$(TESTMOD) ./... ./testdata
