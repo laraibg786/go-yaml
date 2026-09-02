@@ -118,7 +118,7 @@ jobs:
       - name: measure coverage
         run: |
           make cover
-      - uses: codecov/codecov-action@v4
+      - uses: codecov/codecov-action@v7
         with:
           fail_ci_if_error: true
           verbose: true
