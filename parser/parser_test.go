@@ -2003,3 +2003,99 @@ func (v *Visitor) Visit(node ast.Node) ast.Visitor {
 	tk.Next = nil
 	return v
 }
+
+// wideMapping renders keys entries as one mapping, in block style and in flow
+// style, so the two can be compared on identical data.
+func wideMapping(keys int, flow bool) string {
+	var b strings.Builder
+	if flow {
+		b.WriteByte('{')
+	}
+	for i := 0; i < keys; i++ {
+		if flow {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			fmt.Fprintf(&b, "key%d: value%d", i, i)
+			continue
+		}
+		fmt.Fprintf(&b, "key%d: value%d\n", i, i)
+	}
+	if flow {
+		b.WriteByte('}')
+	}
+	return b.String()
+}
+
+func TestWideMapping(t *testing.T) {
+	const keys = 5000
+	for _, test := range []struct {
+		name string
+		flow bool
+	}{
+		{"block", false},
+		{"flow", true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			f, err := parser.ParseBytes([]byte(wideMapping(keys, test.flow)), 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			m, ok := f.Docs[0].Body.(*ast.MappingNode)
+			if !ok {
+				t.Fatalf("unexpected body type %T", f.Docs[0].Body)
+			}
+			if len(m.Values) != keys {
+				t.Fatalf("got %d entries, expected %d", len(m.Values), keys)
+			}
+			for _, idx := range []int{0, keys / 2, keys - 1} {
+				key := m.Values[idx].Key.String()
+				value := m.Values[idx].Value.String()
+				if key != fmt.Sprintf("key%d", idx) || value != fmt.Sprintf("value%d", idx) {
+					t.Fatalf("entry %d is %s: %s", idx, key, value)
+				}
+			}
+		})
+	}
+}
+
+func TestMappingFootComment(t *testing.T) {
+	// The comment below a mapping belongs to its last entry, whatever the
+	// number of entries.
+	for _, test := range []struct {
+		name    string
+		src     string
+		entries int
+	}{
+		{"one entry", "a: 1\n# foot\n", 1},
+		{"two entries", "a: 1\nb: 2\n# foot\n", 2},
+		{"three entries", "a: 1\nb: 2\nc: 3\n# foot1\n# foot2\n", 3},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			f, err := parser.ParseBytes([]byte(test.src), parser.ParseComments)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := f.String(); got != test.src {
+				t.Fatalf("unexpected output: expect:[%s]\n actual:[%s]", test.src, got)
+			}
+			m, ok := f.Docs[0].Body.(*ast.MappingNode)
+			if !ok {
+				t.Fatalf("unexpected body type %T", f.Docs[0].Body)
+			}
+			if len(m.Values) != test.entries {
+				t.Fatalf("got %d entries, expected %d", len(m.Values), test.entries)
+			}
+			if m.FootComment != nil {
+				t.Error("foot comment is attached to the mapping instead of its last entry")
+			}
+			for i, v := range m.Values {
+				gotComment := v.FootComment != nil
+				wantComment := i == len(m.Values)-1
+				if gotComment != wantComment {
+					t.Errorf("entry %d: foot comment %v, expected %v", i, gotComment, wantComment)
+				}
+			}
+		})
+	}
+}

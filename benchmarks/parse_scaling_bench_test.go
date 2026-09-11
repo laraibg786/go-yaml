@@ -28,7 +28,7 @@ func BenchmarkParseScaling(b *testing.B) {
 		b.Run(fmt.Sprintf("nodes=%d", n), func(b *testing.B) {
 			b.SetBytes(int64(len(src)))
 			b.ReportAllocs()
-			for b.Loop() {
+			for i := 0; i < b.N; i++ {
 				if _, err := parser.ParseBytes(src, 0); err != nil {
 					b.Fatal(err)
 				}
