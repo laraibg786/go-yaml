@@ -1,10 +1,10 @@
 module demo
 
-go 1.22.8
+go 1.23
 
 require (
 	github.com/goccy/go-graphviz v0.2.10-0.20250109095217-4ceff9e58e1a
-	github.com/goccy/go-json v0.10.4
+	github.com/goccy/go-json v0.11.2
 	github.com/goccy/go-yaml v1.15.13
 )
 
